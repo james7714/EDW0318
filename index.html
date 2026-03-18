@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>單機版運動提醒與打卡</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #2563eb;
+      --ok: #16a34a;
+      --warn: #d97706;
+      --danger: #dc2626;
+      --border: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 20px;
+    }
+    .wrap {
+      max-width: 900px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.05);
+    }
+    h1, h2, h3 { margin: 0 0 12px; }
+    .muted { color: var(--muted); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .pill {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 14px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    .primary { background: var(--primary); color: white; }
+    .secondary { background: #e5e7eb; color: #111827; }
+    .success { background: var(--ok); color: white; }
+    .warning { background: var(--warn); color: white; }
+    .danger { background: var(--danger); color: white; }
+    input, textarea, select {
+      width: 100%;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      font-size: 15px;
+      background: white;
+    }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .log-item {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      margin-top: 10px;
+      background: #fafafa;
+    }
+    .ok { color: var(--ok); font-weight: 600; }
+    .warn-text { color: var(--warn); font-weight: 600; }
+    .danger-text { color: var(--danger); font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+    .small { font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>單機版運動提醒與打卡</h1>
+      <div class="muted">免安裝、單一 HTML 檔、資料存在本機瀏覽器。</div>
+    </div>
+
+    <div class="card">
+      <h2>今天的任務</h2>
+      <div id="todayBox"></div>
+      <div class="row" style="margin-top:12px;">
+        <button class="primary" id="notifyBtn">開啟瀏覽器通知</button>
+        <button class="secondary" id="testNotifyBtn">測試通知</button>
+      </div>
+      <div class="small muted" style="margin-top:10px;">
+        提醒限制：瀏覽器通知通常需要你至少開著這個頁面，或讓瀏覽器保留背景執行。這版適合先試用記錄與打卡流程。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>今天打卡</h2>
+      <label for="actualReps">實際次數（直接輸入數字，用空白分隔）</label>
+      <input id="actualReps" placeholder="例如：30 20 20" />
+      <div class="row" style="margin-top:12px;">
+        <button class="success" id="completeBtn">完成並記錄</button>
+        <button class="warning" id="plannedBtn">照原計畫完成</button>
+        <button class="danger" id="skipBtn">今天跳過</button>
+      </div>
+      <div id="resultBox" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>設定</h2>
+      <div class="grid">
+        <div>
+          <label for="notifyTime">提醒時間</label>
+          <input id="notifyTime" type="time" value="08:35" />
+        </div>
+        <div>
+          <label for="nameInput">稱呼</label>
+          <input id="nameInput" placeholder="可留空" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <button class="primary" id="saveSettingsBtn">儲存設定</button>
+        <button class="secondary" id="exportBtn">匯出紀錄 JSON</button>
+        <button class="secondary" id="clearBtn">清除全部紀錄</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>本週計畫</h2>
+      <div id="weekPlan"></div>
+    </div>
+
+    <div class="card">
+      <h2>最近紀錄</h2>
+      <div id="summaryBox" class="muted"></div>
+      <div id="logBox"></div>
+    </div>
+  </div>
+
+  <script>
+    const weeklyPlan = {
+      1: { day: '週一', exercise: '下腰', sets: [50, 50, 50], rest: false },
+      2: { day: '週二', exercise: '休息', sets: [], rest: true },
+      3: { day: '週三', exercise: '引體向上（輕鬆版）', sets: [30, 20], rest: false },
+      4: { day: '週四', exercise: '抬腿', sets: [25, 25], rest: false },
+      5: { day: '週五', exercise: '深蹲', sets: [25, 25, 25], rest: false },
+      6: { day: '週六', exercise: '休息', sets: [], rest: true },
+      0: { day: '週日', exercise: '伏地挺身', sets: [40, 40, 40], rest: false },
+    };
+
+    const storageKeys = {
+      logs: 'workout_logs_v1',
+      settings: 'workout_settings_v1',
+      lastNotice: 'workout_last_notice_v1'
+    };
+
+    function nowTaipei() {
+      const now = new Date();
+      return new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Taipei' }));
+    }
+
+    function dateKey(date = nowTaipei()) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function getTodayPlan() {
+      const now = nowTaipei();
+      return { date: dateKey(now), ...weeklyPlan[now.getDay()] };
+    }
+
+    function getLogs() {
+      try { return JSON.parse(localStorage.getItem(storageKeys.logs) || '[]'); }
+      catch { return []; }
+    }
+
+    function saveLogs(logs) {
+      localStorage.setItem(storageKeys.logs, JSON.stringify(logs));
+    }
+
+    function getSettings() {
+      try { return JSON.parse(localStorage.getItem(storageKeys.settings) || '{}'); }
+      catch { return {}; }
+    }
+
+    function saveSettings(settings) {
+      localStorage.setItem(storageKeys.settings, JSON.stringify(settings));
+    }
+
+    function statusText(actualTotal, plannedTotal, skipped=false) {
+      if (skipped) return '未完成';
+      if (actualTotal > plannedTotal) return '超額完成';
+      if (actualTotal === plannedTotal) return '完成';
+      if (actualTotal > 0) return '未達計畫';
+      return '未完成';
+    }
+
+    function recordToday(actualSets, skipped=false) {
+      const plan = getTodayPlan();
+      const logs = getLogs();
+      const existingIndex = logs.findIndex(x => x.date === plan.date);
+      const plannedTotal = plan.sets.reduce((a,b)=>a+b,0);
+      const actualTotal = skipped ? 0 : actualSets.reduce((a,b)=>a+b,0);
+      const record = {
+        date: plan.date,
+        day: plan.day,
+        exercise: plan.exercise,
+        plannedSets: plan.sets,
+        actualSets: skipped ? [] : actualSets,
+        plannedTotal,
+        actualTotal,
+        status: statusText(actualTotal, plannedTotal, skipped),
+        skipped
+      };
+      if (existingIndex >= 0) logs[existingIndex] = record;
+      else logs.unshift(record);
+      saveLogs(logs);
+      return record;
+    }
+
+    function calcStreak() {
+      const logs = [...getLogs()].sort((a,b)=>b.date.localeCompare(a.date));
+      let streak = 0;
+      for (const row of logs) {
+        if (row.status === '完成' || row.status === '超額完成') streak++;
+        else break;
+      }
+      return streak;
+    }
+
+    function renderToday() {
+      const box = document.getElementById('todayBox');
+      const plan = getTodayPlan();
+      if (plan.rest) {
+        box.innerHTML = `<div class="pill">${plan.day}</div><div class="pill">休息日</div><p>今天不用訓練，可以散步或伸展。</p>`;
+        return;
+      }
+      box.innerHTML = `
+        <div class="pill">${plan.day}</div>
+        <div class="pill">${plan.exercise}</div>
+        <div class="pill">${plan.sets.join(' + ')} 下</div>
+        <p>今天要做：<strong>${plan.exercise}</strong></p>
+        <p>組數 / 次數：<strong>${plan.sets.join(' + ')}</strong></p>
+        <p>總計：<strong>${plan.sets.reduce((a,b)=>a+b,0)}</strong> 下</p>
+      `;
+    }
+
+    function renderWeek() {
+      const el = document.getElementById('weekPlan');
+      let html = '<table><thead><tr><th>星期</th><th>內容</th></tr></thead><tbody>';
+      [1,2,3,4,5,6,0].forEach(key => {
+        const p = weeklyPlan[key];
+        html += `<tr><td>${p.day}</td><td>${p.rest ? '休息' : `${p.exercise}（${p.sets.join(' + ')}）`}</td></tr>`;
+      });
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    function renderLogs() {
+      const logs = getLogs();
+      document.getElementById('summaryBox').innerHTML = `目前連續完成：<strong>${calcStreak()}</strong> 天`;
+      const box = document.getElementById('logBox');
+      if (!logs.length) {
+        box.innerHTML = '<div class="muted">還沒有紀錄。</div>';
+        return;
+      }
+      box.innerHTML = logs.slice(0, 20).map(r => `
+        <div class="log-item">
+          <div><strong>${r.date}</strong>｜${r.day}｜${r.exercise}</div>
+          <div class="small muted">計畫：${r.plannedSets.join(' + ') || '休息'}｜實際：${r.actualSets.join(' + ') || '0'}</div>
+          <div style="margin-top:6px;">狀態：<span class="${r.status === '超額完成' || r.status === '完成' ? 'ok' : (r.status === '未達計畫' ? 'warn-text' : 'danger-text')}">${r.status}</span></div>
+        </div>
+      `).join('');
+    }
+
+    function showResult(msg, type='ok') {
+      const color = type === 'ok' ? 'ok' : type === 'warn' ? 'warn-text' : 'danger-text';
+      document.getElementById('resultBox').innerHTML = `<div class="${color}">${msg}</div>`;
+      renderLogs();
+    }
+
+    function askNotification() {
+      if (!('Notification' in window)) {
+        showResult('這個瀏覽器不支援通知。', 'danger');
+        return;
+      }
+      Notification.requestPermission().then(result => {
+        if (result === 'granted') showResult('通知已開啟。', 'ok');
+        else showResult('你沒有允許通知。', 'warn');
+      });
+    }
+
+    function sendNotification(title, body) {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(title, { body });
+      }
+    }
+
+    function maybeNotify() {
+      const settings = getSettings();
+      const notifyTime = settings.notifyTime || '08:35';
+      const now = nowTaipei();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const current = `${hh}:${mm}`;
+      const today = dateKey(now);
+      const last = localStorage.getItem(storageKeys.lastNotice) || '';
+      const plan = getTodayPlan();
+      if (current === notifyTime && last !== today && !plan.rest) {
+        sendNotification('今天的運動提醒', `${plan.day}：${plan.exercise} ${plan.sets.join(' + ')} 下`);
+        localStorage.setItem(storageKeys.lastNotice, today);
+      }
+    }
+
+    document.getElementById('notifyBtn').addEventListener('click', askNotification);
+    document.getElementById('testNotifyBtn').addEventListener('click', () => {
+      const plan = getTodayPlan();
+      sendNotification('測試通知', plan.rest ? `${plan.day}：今天休息` : `${plan.day}：${plan.exercise} ${plan.sets.join(' + ')} 下`);
+    });
+
+    document.getElementById('completeBtn').addEventListener('click', () => {
+      const plan = getTodayPlan();
+      if (plan.rest) return showResult('今天是休息日，不需要打卡。', 'warn');
+      const raw = document.getElementById('actualReps').value.trim();
+      if (!raw) return showResult('請先輸入實際次數，例如 30 20 20。', 'warn');
+      const nums = raw.split(/\s+/).map(x => Number(x)).filter(x => Number.isFinite(x) && x > 0);
+      if (!nums.length) return showResult('格式不正確，請輸入數字。', 'danger');
+      const r = recordToday(nums, false);
+      showResult(`已記錄：${r.exercise}，實際 ${r.actualSets.join(' + ')}，狀態：${r.status}`);
+      document.getElementById('actualReps').value = '';
+    });
+
+    document.getElementById('plannedBtn').addEventListener('click', () => {
+      const plan = getTodayPlan();
+      if (plan.rest) return showResult('今天是休息日，不需要打卡。', 'warn');
+      const r = recordToday(plan.sets, false);
+      showResult(`已記錄：照原計畫完成，狀態：${r.status}`);
+    });
+
+    document.getElementById('skipBtn').addEventListener('click', () => {
+      const plan = getTodayPlan();
+      if (plan.rest) return showResult('今天是休息日，本來就不用做。', 'warn');
+      const r = recordToday([], true);
+      showResult(`已記錄今天跳過，狀態：${r.status}`,'warn');
+    });
+
+    document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+      const settings = {
+        notifyTime: document.getElementById('notifyTime').value || '08:35',
+        name: document.getElementById('nameInput').value.trim()
+      };
+      saveSettings(settings);
+      showResult('設定已儲存。');
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify({ settings: getSettings(), logs: getLogs() }, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `workout-log-${dateKey()}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      if (!confirm('確定要清除全部紀錄嗎？')) return;
+      localStorage.removeItem(storageKeys.logs);
+      localStorage.removeItem(storageKeys.lastNotice);
+      showResult('已清除紀錄。','warn');
+    });
+
+    function initSettings() {
+      const settings = getSettings();
+      document.getElementById('notifyTime').value = settings.notifyTime || '08:35';
+      document.getElementById('nameInput').value = settings.name || '';
+    }
+
+    renderToday();
+    renderWeek();
+    renderLogs();
+    initSettings();
+    maybeNotify();
+    setInterval(maybeNotify, 30000);
+  </script>
+</body>
+</html>
